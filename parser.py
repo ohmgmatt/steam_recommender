@@ -5,12 +5,12 @@ import time
 import config
 
 ## STATIC
-API_KEY = confi.API_KEY
+API_KEY = config.API_KEY
 BASE_URL = 'http://api.steampowered.com/'
 
 
 def steamFriends(steamid):
-    time.sleep(2)
+    time.sleep(1)
     ## Establish the URL
     friend_url = ''.join([BASE_URL,
         'ISteamUser/GetFriendList/v0001/?key=',API_KEY,
@@ -40,56 +40,61 @@ def steamFriends(steamid):
     return 200
 
 def steamGames(steamid):
-    time.sleep(2)
-    ## Establish the URL
-    game_url = ''.join([BASE_URL,
-                      'IPlayerService/GetOwnedGames/v0001/?key=',API_KEY,
-                      '&steamid=',str(steamid),
-                      '&format=json'])
-    ## Setting connection to DB
-    conn = sqlite3.connect('steam.db')
-    c = conn.cursor()
-    ## Pulling from API
-    r = requests.get(game_url)
-    if r.status_code != 200:
-        return r.status_code
-    content = json.loads(r.content)
-    if content['response'] == {}:
-        return 200
-    games = content['response']['games']
-    for g in games:
-        appid = g['appid']
-        playtime = g['playtime_forever']
-        if playtime == 0:
-            continue
-        row = [steamid, appid, playtime]
-        c.execute("INSERT INTO gameplay (steamID, appID, playtime) VALUES (?,?,?);", row)
-    conn.commit()
-    conn.close()
-    return 200
+	time.sleep(1)
+	## Establish the URL
+	game_url = ''.join([BASE_URL,
+						'IPlayerService/GetOwnedGames/v0001/?key=',API_KEY,
+						'&steamid=',str(steamid),
+						'&format=json'])
+	## Setting connection to DB
+	conn = sqlite3.connect('steam.db')
+	c = conn.cursor()
+	## Pulling from API
+	r = requests.get(game_url)
+	if r.status_code != 200:
+		return r.status_code
+	content = json.loads(r.content)
+	if content['response'] == {}:
+		return 200
+	if 'games' in content['response']:
+		games = content['response']['games']
+		for g in games:
+			appid = g['appid']
+			playtime = g['playtime_forever']
+			if playtime == 0:
+				continue
+			row = [steamid, appid, playtime]
+			c.execute("INSERT INTO gameplay (steamID, appID, playtime) VALUES (?,?,?);", row)
+	conn.commit()
+	conn.close()
+	return 200
 
 status = 200
 
 while status == 200:
-    time.sleep(2)
-    conn = sqlite3.connect('steam.db')
-    c = conn.cursor()
-    ## Pull ID
-    c.execute("SELECT id FROM parse_id LIMIT 1")
-    steamID = c.fetchone()[0]
-    ## Insert ID
-    check = "SELECT * FROM finished_id WHERE id = "+str(steamID)
-    c.execute(check)
-    rows = c.fetchall()
-    if len(rows) == 0:
-        insert = 'INSERT INTO finished_id VALUES ('+str(steamID)+')'
-        c.execute(insert)
+	conn = sqlite3.connect('steam.db')
+	c = conn.cursor()
+	## Pull ID
+	c.execute("SELECT id FROM parse_id LIMIT 1")
+	steamID = c.fetchone()[0]
+	## Insert ID
+	check = "SELECT * FROM finished_id WHERE id = "+str(steamID)
+	c.execute(check)
+	rows = c.fetchall()
+	if len(rows) == 0:
+		insert = 'INSERT INTO finished_id VALUES ('+str(steamID)+')'
+		c.execute(insert)
     ## Delete ID
-    delete = 'DELETE FROM parse_id WHERE id = '+str(steamID)
-    c.execute(delete)
-    conn.commit()
-    conn.close()
-    status = steamFriends(steamID)
-    status = steamGames(steamID)
-    if status != 200:
-        print(status)
+	delete = 'DELETE FROM parse_id WHERE id = '+str(steamID)
+	c.execute(delete)
+	conn.commit()
+	conn.close()
+	try:
+		status = steamFriends(steamID)
+		status = steamGames(steamID)
+	except requests.exceptions.ConnectionError as e:
+		print(e)
+		print("Steam ID , ", steamID)
+		continue
+	if status != 200:
+		print(status)
